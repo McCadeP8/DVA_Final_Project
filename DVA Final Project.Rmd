@@ -1,0 +1,263 @@
+---
+title: "BigDataBowl 2021"
+author: "McCade Pearson"
+date: "`r Sys.Date()`"
+output: pdf_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r libraries, include=FALSE}
+library(gt)
+library(tidyverse)
+library(gtExtras)
+library(bslib)
+library(bsicons)
+library(thematic)
+library(shinyscreenshot)
+library(shiny)
+library(thematic)
+library(ggiraph)
+library(ggrepel)
+library(scales)
+library(nflfastR)
+library(glue)
+library(gganimate)
+```
+
+```{r data, include = FALSE}
+Plays2018 <- load_pbp(2018)
+TeamColors <- teams_colors_logos
+SideTable1 <- Plays2018 %>%
+  select(play_id, game_id, old_game_id, desc) %>%
+  mutate(old_game_id = as.numeric(old_game_id)) %>%
+  distinct()
+week1 <- read.csv("C:/Users/mppac/Downloads/nfl-big-data-bowl-2021/week1.csv")
+AllPlays <- rbind(week1)
+AllPlays <- AllPlays %>%
+  left_join(SideTable1, by = c('playId' = 'play_id', 'gameId' = 'old_game_id'))
+```
+
+```{r gg_field}
+gg_field <- function(yardmin=0, yardmax=120, buffer=5, direction="horiz", field_color="forestgreen",line_color="white", sideline_color=field_color, endzone_color="darkgreen"){
+  xmin <- 0
+  xmax <- 120
+  ymin <- 0
+  ymax <- 53.33
+  hash_dist <- (70*12+9)/36
+  yd_lines <- seq(15,105,by=5)
+  yd_hash <- 11:109
+  num_size <- 5
+  angle_vec <- switch(direction, "horiz" = c(0, 180), "vert" = c(270, 90))
+  num_adj <- switch(direction, "horiz" = c(-1, 1), "vert" = c(1, -1))
+  p <- list(
+  annotate("rect", xmin=xmin, xmax=xmax, ymin=ymin-buffer, ymax=ymax+buffer, 
+             fill=field_color),
+  annotate("rect", xmin=xmin, xmax=xmin+10, ymin=ymin, ymax=ymax, fill=endzone_color),
+  annotate("rect", xmin=xmax-10, xmax=xmax, ymin=ymin, ymax=ymax, fill=endzone_color),
+  annotate("segment", x=yd_lines, y=ymin, xend=yd_lines, yend=ymax,
+             col=line_color),
+  annotate("segment",x=c(0,10,60,110,120), y=ymin, xend=c(0,10,60,110,120), yend=ymax,
+             lwd=1.3, col=line_color),
+  annotate("segment",x=0, y=c(ymin, ymax), xend=120, yend=c(ymin, ymax),
+             lwd=1.3, col=line_color) ,
+  annotate("text",x=seq(20,100,by=10) + num_adj[2], y=ymin+12, label=0, angle=angle_vec[1],
+             col=line_color, size=num_size),
+  annotate("text",label=1,x=c(20,100) + num_adj[1], y=ymin+12, angle=angle_vec[1],
+             colour=line_color, size=num_size),
+  annotate("text",label=2,x=c(30,90) + num_adj[1], y=ymin+12, angle=angle_vec[1],
+             colour=line_color, size=num_size),
+  annotate("text",label=3,x=c(40,80) + num_adj[1], y=ymin+12, angle=angle_vec[1],
+             colour=line_color, size=num_size),
+  annotate("text",label=4,x=c(50,70) + num_adj[1], y=ymin+12, angle=angle_vec[1],
+             colour=line_color, size=num_size),
+  annotate("text",label=5,x=60 + num_adj[1], y=ymin+12, angle=angle_vec[1],
+             colour=line_color, size=num_size),
+    
+  annotate("text",x=seq(20,100,by=10) + num_adj[1], y=ymax-12, angle=angle_vec[2],
+             label=0, col=line_color, size=num_size),
+  annotate("text",label=1,x=c(20,100) + num_adj[2], y=ymax-12, angle=angle_vec[2],
+             colour=line_color, size=num_size),
+  annotate("text",label=2,x=c(30,90) + num_adj[2], y=ymax-12, angle=angle_vec[2],
+             colour=line_color, size=num_size),
+  annotate("text",label=3,x=c(40,80) + num_adj[2], y=ymax-12, angle=angle_vec[2],
+             colour=line_color, size=num_size),
+  annotate("text",label=4,x=c(50,70) + num_adj[2], y=ymax-12, angle=angle_vec[2],
+             colour=line_color, size=num_size),
+  annotate("text",label=5,x=60 + num_adj[2], y=ymax-12, angle=angle_vec[2],
+             colour=line_color, size=num_size),
+  annotate("segment", x=yd_hash, y=hash_dist - 0.5, xend=yd_hash, yend=hash_dist + 0.5,
+             color=line_color),
+  annotate("segment", x=yd_hash, y=ymax - hash_dist - 0.5, 
+             xend=yd_hash, yend=ymax - hash_dist + 0.5,color=line_color),
+  annotate("segment", x=yd_hash, y=ymax, xend=yd_hash, yend=ymax-1, color=line_color),
+  annotate("segment", x=yd_hash, y=ymin, xend=yd_hash, yend=ymin+1, color=line_color),
+  annotate("segment",x=12, y=(ymax-1)/2, xend=12, yend=(ymax+1)/2, color=line_color),
+  annotate("segment",x=108, y=(ymax-1)/2, xend=108, yend=(ymax+1)/2, color=line_color),
+  annotate("rect", xmin=0, xmax=xmax, ymin=ymax, ymax=ymax+buffer, fill=sideline_color),
+  annotate("rect",xmin=0, xmax=xmax, ymin=ymin-buffer, ymax=ymin, fill=sideline_color),
+  labs(x="", y=""),
+  theme(axis.text.x = element_blank(),axis.text.y = element_blank(),
+          axis.ticks = element_blank()),
+  if(direction=="horiz"){
+      coord_cartesian(xlim=c(yardmin, yardmax), ylim = c(ymin-buffer,ymax+buffer), 
+                      expand = FALSE)} else if (direction=="vert"){
+      coord_flip(xlim=c(yardmin, yardmax), ylim = c(ymin-buffer,ymax+buffer), expand = FALSE)})
+  return(p)}
+gg_field_team <- function(team, name_color=NULL){
+    df_team <- nflfastR::teams_colors_logos
+    df_team <- as.data.frame(df_team) 
+    df_team <- df_team %>%
+    dplyr::filter(team_name == team | team_nick == team | team_abbr == team) 
+  prm <- df_team %>% pull(team_color)
+  sec <- df_team %>% pull(team_color2)
+  name_color <- ifelse(is.null(name_color), prm, name_color)
+  p <- df_team %>%
+    ggplot() + gg_field(endzone_color = prm, sideline_color=sec, buffer = 0) + 
+    ggimage::geom_image(aes(x=60, y=53.33/2,
+                            image = team_logo_wikipedia),size=0.15)
+  return(p)}
+```
+
+```{r Model1}
+
+```
+
+```{r PlayTest}
+GetPlayData <- function(PlayNumber, GameID) {
+PlayData <- AllPlays %>%
+  filter(playId == PlayNumber & gameId == GameID) %>%
+  mutate(gameId = as.character(gameId)) %>%
+  left_join(Plays2018, by = c('gameId' = 'old_game_id', 'playId' = 'play_id')) %>%
+  mutate(team = ifelse(team == "home", home_team, team),
+         team = ifelse(team == "away", away_team, team),
+         side = ifelse(team == posteam, "Off", "Def"),
+         route = ifelse(route == "", NA, route)) %>%
+  mutate(ExpYds = ifelse(side == "Off" & position != "QB", rnorm(n(),0,1), NA)) %>%
+  select(x, y, jerseyNumber, frameId, team, playDirection, ExpYds, displayName, gameId, route) %>%
+  left_join(TeamColors, by = c('team' = 'team_abbr')) %>%
+  mutate(jerseyNumber = ifelse(team == "football", "---", jerseyNumber),
+         team_color = ifelse(team == "football", "#964B00", team_color),
+         team_color2 = ifelse(team == "football", "#FFFFFF", team_color2))
+
+PlayLength <- max(PlayData$frameId)
+
+PlayInfo <- Plays2018 %>%
+  filter(play_id == PlayNumber & old_game_id == GameID) %>%
+  slice(rep(1, PlayLength)) %>%
+  mutate(frameId = 1:PlayLength)
+  return(list(PlayData = PlayData, PlayInfo = PlayInfo))}
+GetPlayData2 <- GetPlayData(75, 2018090600)
+GetMarker <- function(Yds, Direction) {
+  if (Direction == "right") {
+    Line = 110-Yds
+    return(Line)
+  } else if (Direction == "left") {
+    Line = 10+Yds
+    return(Line)
+  }
+}
+GetPlayGif <- function(GetPlayData) {
+  PlayData <- GetPlayData$PlayData
+  PlayInfo <- GetPlayData$PlayInfo
+  Length <- max(PlayData$frameId, na.rm = TRUE)
+  nudge_direction <- ifelse(PlayData$playDirection[1] == "left", 5, -5)
+  Yardline <- GetMarker(PlayInfo$yardline_100[1],PlayData$playDirection[1])
+  FirstDown <- ifelse(PlayData$playDirection[1] == "right", Yardline+PlayInfo$ydstogo, Yardline-PlayInfo$ydstogo)
+  
+p <- gg_field_team(PlayInfo$home_team[1]) +
+  geom_segment(aes(x = Yardline, xend = Yardline, y = 0, yend = 160/3), color = "blue") +
+  geom_segment(aes(x = FirstDown, xend = FirstDown, y = 0, yend = 160/3), color = "yellow") +
+  geom_label(data = PlayData, aes(x = x, y = y, label = jerseyNumber), fill = PlayData$team_color, color = PlayData$team_color2) +
+  geom_label_repel(data = PlayData, aes(x = x, y = y, label = round(ExpYds, 1)), nudge_x = nudge_direction, hjust = 0, direction = "x") +
+  transition_time(GetPlayData$PlayData$frameId) +
+  ease_aes('linear') +
+  theme(aspect.ratio = (160/3)/120)
+p <- animate(p, nframes = Length, fps = 5, width = 720, height = 320)
+  return(p)}
+GetFrameVisual <- function(GetPlayData, Frame) {
+  PlayData <- GetPlayData$PlayData %>%
+    filter(frameId == Frame)
+  PlayInfo <- GetPlayData$PlayInfo
+  Length <- max(PlayData$frameId, na.rm = TRUE)
+  nudge_direction <- ifelse(PlayData$playDirection[1] == "left", 5, -5)
+  Yardline <- GetMarker(PlayInfo$yardline_100[1], PlayData$playDirection[1])
+  FirstDown <- ifelse(PlayData$playDirection[1] == "right", Yardline + PlayInfo$ydstogo, Yardline - PlayInfo$ydstogo)
+
+  p <- gg_field_team(PlayInfo$home_team[1]) +
+    geom_segment(aes(x = Yardline, xend = Yardline, y = 0, yend = 160/3), color = "blue") +
+    geom_segment(aes(x = FirstDown, xend = FirstDown, y = 0, yend = 160/3), color = "yellow") +
+    geom_label_repel(data = PlayData, aes(x = x, y = y, label = round(ExpYds, 1)), nudge_x = nudge_direction, hjust = 0, direction = "x", size = 3) +
+    geom_label_interactive(data = PlayData,
+                           aes(x = x, y = y, label = jerseyNumber,
+                               tooltip = paste("Player:", displayName, "<br>",
+                                               "Exp. Yards:", round(ExpYds, 5), "<br>",
+                                               "X-Tracking:", x, "<br>",
+                                               "Y-Tracking:", y, "<br>",
+                                               "Route:", route)),
+                           fill = PlayData$team_color, color = PlayData$team_color2, size = 4) +
+    theme_void() +
+    theme(aspect.ratio = (160/3) / 120, plot.margin = margin(0, 0, 0, 0))
+p2 <- girafe(ggobj = p, options = list(
+    opts_toolbar(saveaspng = FALSE), 
+    opts_sizing(rescale = TRUE)), width_svg = 10, height_svg = 4.8)
+  return(p2)
+}
+GetFrameVisual(GetPlayData2, 22)
+GetLineChart <- function(GetPlayData) {
+  PlayData <- GetPlayData2$PlayData %>%
+    filter(is.na(ExpYds) == F) %>%
+    select(ExpYds, displayName, frameId)
+  
+  A <- ggplot(PlayData) +
+    geom_line(aes(x = frameId, y = ExpYds, color = displayName)) +
+    theme(legend.position = "bottom")
+  return(A)
+}
+anim_save("play_animation.gif", GifA)
+```
+
+```{r shiny}
+sidebar_content <- list(
+  selectInput("Input1", "Game:", choices = unique(AllPlays$game_id), selected = AllPlays$game_id[1])
+  #selectInput("Input2", "Play:", choices = unique(AllPlays$desc), selected = AllPlays$desc[1])
+  )
+
+thematic_shiny(font = font_spec(scale = 2))
+
+ui <- page_navbar(
+  theme = bs_theme(bootswatch = "yeti",
+                   version = 5,
+                   primary = "#009CDE", `enable-gradients` = TRUE, font_scale = 0.8),
+  title = "NFL Receiver Expected Yards",
+  sidebar = sidebar(
+    class = "bg-secondary",
+    sidebar_content),
+  navset_card_pill(
+   layout_columns(
+        value_box(title = "Scoreboard", textOutput("Text1"), showcase = bs_icon("clipboard-data"), theme = "success", showcase_layout = showcase_left_center(width = 0.1)),
+        card(fill = TRUE, girafeOutput("Table1", height = "100%")),
+        card(fill = TRUE, plotOutput("Plot1")),
+        value_box(title = "Play Description", textOutput("Text2"), showcase = bs_icon("chat-left-text"), theme = "success", showcase_layout = showcase_left_center(width = 0.1)),
+        col_widths = c(12,9,3,12),
+        row_heights = c(1,6,1)  # Move row_heights here inside layout_columns
+      )
+    )
+  )
+
+server <- function(input, output) {
+  bs_themer()
+
+  output$Table1 <- renderGirafe({GetFrameVisual(GetPlayData2, 22)})
+  output$Plot1 <- renderPlot({GetLineChart(GetPlayData2)})
+  output$Text1 <- renderText({"ABC"})
+  output$Text2 <- renderText({"ABC"})
+
+
+}
+
+shinyApp(ui, server)
+
+
+```
+
